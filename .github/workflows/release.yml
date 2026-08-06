@@ -1,0 +1,94 @@
+name: release
+
+# Builds a release binary for aarch64-apple-darwin on every numeric tag push,
+# uploads it as a release asset on the tap repo (armcknight/homebrew-tools)
+# so the homebrew cask can fetch it without authentication, then bumps the
+# cask file's version + sha256 and commits back.
+#
+# RC tags (e.g. `0.1.1-rc.1`) route to `Casks/work-rc.rb`; final tags
+# (e.g. `0.1.1`) route to `Casks/work.rb`. So you can `make deploy-beta` to
+# cut RCs without disturbing the stable channel.
+#
+# Requires a fine-grained PAT stored as `TAP_RELEASE_TOKEN` with
+# `Contents: read+write` on armcknight/homebrew-tools. See README for setup.
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+-*'
+
+env:
+  TAP_REPO: armcknight/homebrew-tools
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release binary
+        run: swift build -c release
+
+      - name: Resolve version + cask path
+        id: ver
+        run: |
+          set -e
+          TAG="${GITHUB_REF_NAME}"
+          PKG_VERSION=$(sed -nE 's/.*static let version = "([^"]+)".*/\1/p' Sources/work/CLI/Work.swift | head -1)
+          # An RC tag like 0.1.1-rc.1 should match the package's base 0.1.1.
+          BASE="${TAG%%-*}"
+          if [ "$BASE" != "$PKG_VERSION" ]; then
+            echo "Package version ($PKG_VERSION) does not match base of tag ($TAG)"
+            exit 1
+          fi
+          if [[ "$TAG" == *-* ]]; then
+            CASK_PATH="Casks/work-rc.rb"
+          else
+            CASK_PATH="Casks/work.rb"
+          fi
+          echo "version=$TAG" >> "$GITHUB_OUTPUT"
+          echo "cask_path=$CASK_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Package tarball
+        id: pkg
+        run: |
+          set -e
+          ARCHIVE="work-${GITHUB_REF_NAME}-aarch64-apple-darwin.tar.gz"
+          mkdir -p dist
+          tar -czf "dist/$ARCHIVE" -C .build/release work
+          SHA=$(shasum -a 256 "dist/$ARCHIVE" | awk '{print $1}')
+          echo "archive=dist/$ARCHIVE" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Create release on tap repo
+        env:
+          GH_TOKEN: ${{ secrets.TAP_RELEASE_TOKEN }}
+        run: |
+          gh release create "work-${GITHUB_REF_NAME}" \
+            --repo "$TAP_REPO" \
+            --title "work ${GITHUB_REF_NAME}" \
+            --notes "Binary release for work ${GITHUB_REF_NAME} (aarch64-apple-darwin)." \
+            "${{ steps.pkg.outputs.archive }}"
+
+      - name: Bump cask in tap repo
+        env:
+          GH_TOKEN: ${{ secrets.TAP_RELEASE_TOKEN }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          SHA256: ${{ steps.pkg.outputs.sha256 }}
+          CASK_PATH: ${{ steps.ver.outputs.cask_path }}
+        run: |
+          set -e
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${TAP_REPO}.git" tap
+          cd tap
+          sed -i '' -E "s/^  version \".*\"$/  version \"${VERSION}\"/" "${CASK_PATH}"
+          sed -i '' -E "s/^  sha256 \".*\"$/  sha256 \"${SHA256}\"/" "${CASK_PATH}"
+          if git diff --quiet; then
+            echo "no cask changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${CASK_PATH}"
+          git commit -m "work: bump $(basename ${CASK_PATH} .rb) to ${VERSION}"
+          git push

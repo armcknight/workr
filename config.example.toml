@@ -1,0 +1,60 @@
+# workr config — drop this at ~/.config/work/config.toml to override defaults.
+# Any key you omit falls back to the baked-in default; you only need to list
+# the bits you want to change.
+
+[worktree]
+# Path template for new worktrees. `{branch}` is replaced with the branch name.
+path_template = "worktrees/{branch}"
+# Files to symlink from the main repo root into a new worktree.
+symlink_files = [".env", ".envrc", "fastlane/.env"]
+# Shell command to run after creating the worktree (cd'd into it). Empty to skip.
+post_create_command = "make init"
+
+[tmux]
+# Name of the tmuxinator config (`~/.config/tmuxinator/<name>.yml`) used by `work term`.
+tmuxinator_config = "dev"
+
+[linear]
+# Whether to move the ticket's state when `work start --provider` runs.
+auto_update_state = true
+# Target state name.
+state_name = "In Progress"
+
+[remote]
+# Default cloud-devbox provider. Mechanics live in an out-of-tree plugin
+# executable `work-remote-<provider>` found on PATH (e.g. work-remote-coder).
+# Empty means no default — pass `--provider <name>` per invocation.
+provider = "coder"
+# Optional explicit path to the plugin executable, overriding PATH lookup.
+# path = "/usr/local/bin/work-remote-coder"
+
+[project]
+# Repos your work spans. Used by core's PR annotation (`work remote status`)
+# and forwarded to providers that pre-seed branches on GitHub.
+repos = ["your-org/your-repo"]
+
+# Provider-specific settings (template, ports, hosts, workspace paths, ...)
+# live in the plugin's OWN config, not here. See the plugin's README.
+
+[prompt]
+# Path to the local directory containing Claude slash-command markdown files.
+# Tilde expansion is supported. The basename of this path is preserved on the
+# remote — e.g. ~/.claude/commands → ~/.claude/commands inside the workspace.
+slash_commands_dir = "~/.claude/commands"
+
+# Slash-command markdown files to inline into the bootstrap prompt sent to
+# Claude on workspace start, with the heading rendered above each file's
+# content. Skipped if the file is missing.
+[[prompt.inline_sections]]
+file = "review.md"
+heading = "Review conventions"
+[[prompt.inline_sections]]
+file = "commit.md"
+heading = "Commit conventions"
+[[prompt.inline_sections]]
+file = "pr.md"
+heading = "PR conventions"
+
+[github]
+# Fields fetched per PR for `work remote status` annotation.
+pr_fields = ["url", "headRefName", "isDraft", "state", "reviewDecision", "statusCheckRollup"]
