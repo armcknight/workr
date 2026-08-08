@@ -102,15 +102,41 @@ Cloud devboxes (via a pluggable provider — see below):
   provider`, or `--provider <name>`)
 - Per-invocation provider param override via `--param key=value` (repeatable)
 
-## Remote providers (plugins)
+## Architecture
 
-Cloud-devbox mechanics live in out-of-tree **plugin executables** named
-`work-remote-<name>` on your `PATH` (or an explicit `[remote] path`). workr
-core carries no provider-specific knowledge; it speaks a small JSON-over-stdio
-contract (see the `WorkRemoteContract` library product) to whichever plugin is
-selected. Provider-specific settings live in the plugin's own config, not in
-workr's. To add a provider, ship a `work-remote-<name>` binary implementing
-the contract.
+`work` does two things behind one CLI, and the second is fully pluggable.
+
+- **Local worktrees** (`start` / `term` / `finish`, no `--provider`): create a
+  git worktree, symlink env files into it, run a post-create command, and open
+  a tmuxinator session. Entirely self-contained.
+- **Remote devboxes** (`--provider <name>`, `work remote …`): provision and
+  drive a cloud dev environment. **`work` itself contains no knowledge of any
+  specific cloud provider** — that lives in out-of-tree plugins.
+
+### The provider plugin contract
+
+A provider is a separate executable named `work-remote-<name>`, discovered on
+your `PATH` (or at an explicit `[remote] path`). `work` talks to it over a
+small JSON-over-stdio protocol defined by the **`WorkRemoteContract`** library
+product in this repo: for each operation `work` runs `work-remote-<name> <op>`,
+writes a JSON request on stdin, and reads a JSON response on stdout (streaming
+ops like `start` and `log` inherit the terminal instead).
+
+The operations are `describe` (capabilities + where repos are checked out in
+the box), `slug`, `exists`, `start`, `finish`, `status`, `log`, `prompt`, and
+`test`. `work` owns everything provider-agnostic — Linear ticket lookup,
+bootstrap-prompt assembly, PR annotation via `gh`, the status table, and
+contract-version negotiation — and delegates only the provider-specific
+mechanics (create / teardown / deliver / stream) to the plugin. Provider
+settings (templates, hosts, ports, credentials) live in the plugin's own
+config file, never in `work`'s.
+
+### Writing a provider
+
+Depend on the `WorkRemoteContract` library, implement the ops it defines, and
+ship an executable named `work-remote-<yourname>`. Set `[remote] provider =
+"<yourname>"` (or pass `--provider <yourname>`). No changes to `work` itself
+are needed — a new provider is purely additive and out-of-tree.
 
 ## License
 
