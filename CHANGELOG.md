@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- First published build. The 1.0.0 release was tagged but its CI release job
+  failed before publishing (a signing-pipeline bug); 1.0.1 ships the Developer
+  ID signed, notarized binary.
+
 ## [1.0.0] 2026-08-10
 
 First stable release. No functional changes since 0.3.0 — the bump marks the
