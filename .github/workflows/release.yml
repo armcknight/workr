@@ -1,10 +1,11 @@
 name: release
 
 # Delegates to armcknight/workflows' reusable SwiftPM cask-release pipeline:
-# builds, (optionally signs+notarizes), tarballs, publishes to the
-# armcknight/homebrew-tools tap, and bumps Casks/work.rb (or work-rc.rb for an
-# RC tag). Requires TAP_RELEASE_TOKEN (Contents: read+write on the tap). To
-# turn on signing, set `sign: true` and add the Developer ID + notary secrets.
+# builds, signs+notarizes, tarballs, publishes to the armcknight/homebrew-tools
+# tap, and bumps Casks/work.rb (or work-rc.rb for an RC tag). Requires
+# TAP_RELEASE_TOKEN (Contents: read+write on the tap). Signing reads the
+# Developer ID certificate from the fastlane match repo (readonly), so it also
+# needs the MATCH_PASSWORD + MATCH_DEPLOY_KEY and NOTARY_* secrets.
 
 on:
   push:
@@ -20,4 +21,7 @@ jobs:
       binaries: work
       version-file: Sources/work/CLI/Work.swift
       version-regex: '.*static let version = "([^"]+)".*'
+      sign: true
+      match-git-url: git@github.com:armcknight/fastlane-match.git
+      team-id: 29274SF4VL
     secrets: inherit
