@@ -4,6 +4,23 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-08-10
+
+First stable release. No functional changes since 0.3.0 — the bump marks the
+provider-plugin architecture, CLI surface, and config layout as stable and
+committed to under semantic versioning.
+
+### Added
+
+- Release binaries are now Developer ID signed and notarized, so the Homebrew
+  cask installs and runs without a Gatekeeper prompt.
+
+### Changed
+
+- CI and releases now delegate to armcknight/workflows' reusable SwiftPM
+  pipelines: build + test on every push and PR, and a tag-driven signed cask
+  release. Removes the bespoke in-repo release YAML.
+
 ## [0.3.0] - 2026-08-06
 
 ### Changed
