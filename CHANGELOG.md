@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.0] 2026-08-10
+
 First stable release. No functional changes since 0.3.0 — the bump marks the
 provider-plugin architecture, CLI surface, and config layout as stable and
 committed to under semantic versioning.
