@@ -47,13 +47,15 @@ uninstall: ## Remove the local work binary and restore the Homebrew cask
 
 # MARK: - Releasing
 #
-# Bumps the package version, then tags + pushes. GitHub Actions picks up the
-# tag, builds, uploads to armcknight/homebrew-tools releases, and bumps the
-# matching cask file there:
+# `make {patch,minor,major}` bumps the version in the source with vrsn. Then
+# `make deploy` runs prepare-release, which migrates the CHANGELOG [Unreleased]
+# section into a dated version section, commits, tags, and pushes. GitHub
+# Actions picks up the tag, builds, uploads to armcknight/homebrew-tools
+# releases, and bumps the matching cask file there:
 #   - tags `X.Y.Z`        → Casks/work.rb       (stable channel)
 #   - tags `X.Y.Z-rc.N`   → Casks/work-rc.rb    (RC channel; users opt in)
 #
-# Requires `vrsn` on PATH (from armcknight/tools cask).
+# Requires `vrsn` + `prepare-release` on PATH (from the armcknight/tools cask).
 
 patch: ## Bump the patch version (x.y.Z) and commit
 	vrsn patch -f $(VERSION_FILE) -k $(VRSN_KEY) --commit
@@ -67,17 +69,8 @@ major: ## Bump the major version (X.0.0) and commit
 # Tags an RC of the current package version. RC number is auto-incremented
 # by counting existing `<version>-rc.*` tags. So you can run deploy-beta
 # repeatedly to ship rc.1, rc.2, etc. without re-bumping the version.
-deploy-beta: ## Tag + push an RC of the current version (ships to work-rc cask)
-	@VERSION=$$(vrsn -r -f $(VERSION_FILE) -k $(VRSN_KEY)) && \
-	N=$$(git tag --list "$$VERSION-rc.*" | wc -l | tr -d ' ') && \
-	NEXT=$$((N + 1)) && \
-	TAG="$$VERSION-rc.$$NEXT" && \
-	echo "Tagging $$TAG..." && \
-	git tag -a "$$TAG" -m "$$TAG" && \
-	git push && git push origin "$$TAG"
+deploy-beta: ## Migrate the changelog, tag an RC, and push (ships the work-rc cask)
+	prepare-release rc --file $(VERSION_FILE) --key $(VRSN_KEY) --push
 
-deploy: ## Tag + push the current version (ships to the stable work cask)
-	@VERSION=$$(vrsn -r -f $(VERSION_FILE) -k $(VRSN_KEY)) && \
-	echo "Tagging $$VERSION..." && \
-	git tag -a "$$VERSION" -m "$$VERSION" && \
-	git push && git push origin "$$VERSION"
+deploy: ## Migrate the changelog, tag, and push the release (ships the stable work cask)
+	prepare-release --file $(VERSION_FILE) --key $(VRSN_KEY) --push
