@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.1] 2026-08-10
+
 ### Fixed
 
 - First published build. The 1.0.0 release was tagged but its CI release job
