@@ -105,3 +105,138 @@ final class PRAnnotationTests: XCTestCase {
         XCTAssertEqual(PRAnnotation.annotate("nothing", []), "-")
     }
 }
+
+/// Branch resolution has to survive a detached HEAD, which is what git parks
+/// you on mid-rebase. These drive real git repos in temp dirs because the
+/// behavior under test *is* git's — `branch --show-current` going empty, and
+/// the rebase state dir landing in a different place for a linked worktree
+/// than for a plain clone.
+final class GitSessionBranchTests: XCTestCase {
+    private var originalCWD: String!
+    private var tmp: String!
+
+    override func setUp() {
+        super.setUp()
+        originalCWD = FileManager.default.currentDirectoryPath
+        tmp = NSTemporaryDirectory() + "workr-git-tests-" + UUID().uuidString
+        try? FileManager.default.createDirectory(
+            atPath: tmp, withIntermediateDirectories: true)
+    }
+
+    override func tearDown() {
+        // sessionBranch() reads the *process* working directory, so restore it
+        // before the next test runs.
+        FileManager.default.changeCurrentDirectoryPath(originalCWD)
+        try? FileManager.default.removeItem(atPath: tmp)
+        super.tearDown()
+    }
+
+    @discardableResult
+    private func git(_ args: [String], in dir: String) -> CommandOutput? {
+        // -c flags keep these repos independent of the developer's git identity.
+        let identity = [
+            "-c", "user.email=test@example.com",
+            "-c", "user.name=Test",
+            "-c", "commit.gpgsign=false",
+        ]
+        return try? Shell.capture("git", identity + args, currentDirectory: dir)
+    }
+
+    private func write(_ text: String, to path: String) {
+        try? text.write(toFile: path, atomically: true, encoding: .utf8)
+    }
+
+    /// Build a repo whose `topic` branch conflicts with `main`, then start the
+    /// rebase so it stops on the conflict. Using a real conflict avoids needing
+    /// to drive an interactive editor. Returns the repo path.
+    private func repoStoppedMidRebase() -> String {
+        let repo = tmp + "/repo"
+        try? FileManager.default.createDirectory(atPath: repo, withIntermediateDirectories: true)
+        git(["init", "-q", "-b", "main"], in: repo)
+        write("a\n", to: repo + "/file.txt")
+        git(["add", "."], in: repo)
+        git(["commit", "-q", "-m", "base"], in: repo)
+
+        git(["checkout", "-q", "-b", "topic"], in: repo)
+        write("b\n", to: repo + "/file.txt")
+        git(["commit", "-q", "-am", "topic change"], in: repo)
+
+        git(["checkout", "-q", "main"], in: repo)
+        write("c\n", to: repo + "/file.txt")
+        git(["commit", "-q", "-am", "main change"], in: repo)
+
+        git(["checkout", "-q", "topic"], in: repo)
+        git(["rebase", "main"], in: repo)  // conflicts, leaving us mid-rebase
+        return repo
+    }
+
+    func testResolvesBranchNormally() throws {
+        let repo = tmp + "/plain"
+        try? FileManager.default.createDirectory(atPath: repo, withIntermediateDirectories: true)
+        git(["init", "-q", "-b", "main"], in: repo)
+        git(["commit", "-q", "--allow-empty", "-m", "one"], in: repo)
+
+        FileManager.default.changeCurrentDirectoryPath(repo)
+        XCTAssertEqual(try Git.sessionBranch(), "main")
+    }
+
+    func testResolvesBranchMidRebaseInPlainRepo() throws {
+        let repo = repoStoppedMidRebase()
+        FileManager.default.changeCurrentDirectoryPath(repo)
+
+        // Precondition: this is the state that used to be misreported as
+        // "not in a git repository".
+        XCTAssertTrue(Git.inRepo())
+        XCTAssertEqual(try Git.currentBranch(), "", "expected detached HEAD mid-rebase")
+
+        XCTAssertEqual(try Git.sessionBranch(), "topic")
+    }
+
+    func testResolvesBranchMidRebaseInLinkedWorktree() throws {
+        // In a linked worktree `.git` is a file and the rebase state lives under
+        // the main repo's .git/worktrees/<name>/, so a naive ".git/rebase-merge"
+        // lookup would miss it.
+        let repo = tmp + "/wt-main"
+        try? FileManager.default.createDirectory(atPath: repo, withIntermediateDirectories: true)
+        git(["init", "-q", "-b", "main"], in: repo)
+        write("a\n", to: repo + "/file.txt")
+        git(["add", "."], in: repo)
+        git(["commit", "-q", "-m", "base"], in: repo)
+
+        let wt = tmp + "/wt-linked"
+        git(["worktree", "add", "-q", wt, "-b", "sidebranch"], in: repo)
+
+        write("b\n", to: wt + "/file.txt")
+        git(["commit", "-q", "-am", "worktree change"], in: wt)
+
+        write("c\n", to: repo + "/file.txt")
+        git(["commit", "-q", "-am", "main change"], in: repo)
+
+        git(["rebase", "main"], in: wt)  // conflicts
+
+        FileManager.default.changeCurrentDirectoryPath(wt)
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: wt + "/.git"),
+            "expected .git to exist as a file in a linked worktree")
+        XCTAssertEqual(try Git.currentBranch(), "", "expected detached HEAD mid-rebase")
+
+        XCTAssertEqual(try Git.sessionBranch(), "sidebranch")
+    }
+
+    func testFallsBackToShortShaWhenDetachedWithoutRebase() throws {
+        let repo = tmp + "/detached"
+        try? FileManager.default.createDirectory(atPath: repo, withIntermediateDirectories: true)
+        git(["init", "-q", "-b", "main"], in: repo)
+        git(["commit", "-q", "--allow-empty", "-m", "one"], in: repo)
+        git(["checkout", "-q", "--detach", "HEAD"], in: repo)
+
+        FileManager.default.changeCurrentDirectoryPath(repo)
+        XCTAssertEqual(try Git.currentBranch(), "")
+        XCTAssertNil(Git.rebaseHeadName(), "no rebase is running")
+
+        let resolved = try Git.sessionBranch()
+        XCTAssertTrue(
+            resolved.hasPrefix("detached-"),
+            "expected a detached-<sha> fallback, got \(resolved)")
+    }
+}

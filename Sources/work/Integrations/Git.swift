@@ -57,6 +57,64 @@ enum Git {
         return out.stdoutString.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// The branch a rebase is replaying onto, or nil if no rebase is running.
+    ///
+    /// Mid-rebase git parks you on a detached HEAD, so `branch --show-current`
+    /// returns empty (with exit 0 — it is not an error). The branch being
+    /// rebased is still recorded in `head-name` under the rebase state dir:
+    /// `rebase-merge` for the interactive/merge backend, `rebase-apply` for
+    /// the `am` backend.
+    ///
+    /// Resolved via `git rev-parse --git-path` rather than assuming `.git/`,
+    /// because in a linked worktree `.git` is a *file* and the real state dir
+    /// lives under `.git/worktrees/<name>/` in the main repo.
+    static func rebaseHeadName() -> String? {
+        for dir in ["rebase-merge", "rebase-apply"] {
+            guard let out = try? Shell.capture("git", ["rev-parse", "--git-path", "\(dir)/head-name"]),
+                  out.succeeded
+            else { continue }
+            let path = out.stdoutString.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !path.isEmpty,
+                  let contents = try? String(contentsOfFile: path, encoding: .utf8)
+            else { continue }
+            let ref = contents.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !ref.isEmpty else { continue }
+            // head-name holds a full ref, e.g. "refs/heads/topic".
+            if ref.hasPrefix("refs/heads/") {
+                return String(ref.dropFirst("refs/heads/".count))
+            }
+            return ref
+        }
+        return nil
+    }
+
+    static func shortHead() -> String? {
+        guard let out = try? Shell.capture("git", ["rev-parse", "--short", "HEAD"]), out.succeeded
+        else { return nil }
+        let sha = out.stdoutString.trimmingCharacters(in: .whitespacesAndNewlines)
+        return sha.isEmpty ? nil : sha
+    }
+
+    /// Branch name to key a tmux session off of, tolerating a detached HEAD.
+    ///
+    /// Callers must already have established they're in a repo — an empty
+    /// result here means detached HEAD, not "no repository".
+    ///
+    /// Mid-rebase this resolves back to the branch being rebased, so
+    /// `work term` attaches to the same session it would outside the rebase
+    /// rather than spawning a second one. A plain detached HEAD (e.g. after
+    /// `git checkout <sha>`) has no branch to recover, so it falls back to the
+    /// short SHA, which at least stays stable while you're parked there.
+    static func sessionBranch() throws -> String {
+        let current = try currentBranch()
+        if !current.isEmpty { return current }
+        if let rebasing = rebaseHeadName() { return rebasing }
+        if let sha = shortHead() { return "detached-\(sha)" }
+        throw WorkError(
+            "Could not determine a branch name: HEAD is detached and no rebase state or commit was found."
+        )
+    }
+
     /// Look up a local branch whose last `/`-segment contains the slug. Used by
     /// `finish --coder` to recover the full topic branch from a workspace name.
     static func findBranchBySuffix(_ slug: String) -> String? {
