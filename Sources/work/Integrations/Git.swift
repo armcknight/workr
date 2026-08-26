@@ -57,35 +57,56 @@ enum Git {
         return out.stdoutString.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// The branch a rebase is replaying onto, or nil if no rebase is running.
+    /// Read a file inside the repo's git dir, located via `git rev-parse
+    /// --git-path` rather than assuming `.git/` — in a linked worktree `.git`
+    /// is a *file* and the real state dir lives under `.git/worktrees/<name>/`
+    /// in the main repo.
+    private static func readGitPathFile(_ relative: String) -> String? {
+        guard let out = try? Shell.capture("git", ["rev-parse", "--git-path", relative]),
+              out.succeeded
+        else { return nil }
+        let path = out.stdoutString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !path.isEmpty,
+              let contents = try? String(contentsOfFile: path, encoding: .utf8)
+        else { return nil }
+        let value = contents.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+
+    private static func strippingHeadsPrefix(_ ref: String) -> String {
+        ref.hasPrefix("refs/heads/") ? String(ref.dropFirst("refs/heads/".count)) : ref
+    }
+
+    /// The branch a rebase is replaying, or nil if no rebase is running.
     ///
     /// Mid-rebase git parks you on a detached HEAD, so `branch --show-current`
     /// returns empty (with exit 0 — it is not an error). The branch being
     /// rebased is still recorded in `head-name` under the rebase state dir:
     /// `rebase-merge` for the interactive/merge backend, `rebase-apply` for
     /// the `am` backend.
-    ///
-    /// Resolved via `git rev-parse --git-path` rather than assuming `.git/`,
-    /// because in a linked worktree `.git` is a *file* and the real state dir
-    /// lives under `.git/worktrees/<name>/` in the main repo.
     static func rebaseHeadName() -> String? {
         for dir in ["rebase-merge", "rebase-apply"] {
-            guard let out = try? Shell.capture("git", ["rev-parse", "--git-path", "\(dir)/head-name"]),
-                  out.succeeded
-            else { continue }
-            let path = out.stdoutString.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !path.isEmpty,
-                  let contents = try? String(contentsOfFile: path, encoding: .utf8)
-            else { continue }
-            let ref = contents.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !ref.isEmpty else { continue }
-            // head-name holds a full ref, e.g. "refs/heads/topic".
-            if ref.hasPrefix("refs/heads/") {
-                return String(ref.dropFirst("refs/heads/".count))
+            if let ref = readGitPathFile("\(dir)/head-name") {
+                // head-name holds a full ref, e.g. "refs/heads/topic".
+                return strippingHeadsPrefix(ref)
             }
-            return ref
         }
         return nil
+    }
+
+    /// The branch a bisect started from, or nil if no bisect is running.
+    ///
+    /// Bisect is the other common operation that detaches HEAD. It matters
+    /// more than a one-off detach: HEAD moves to a different commit at every
+    /// `git bisect good/bad`, so keying a session off the SHA would spawn a
+    /// fresh tmux session on each step. BISECT_START records where the bisect
+    /// began — a branch name normally, or a raw SHA if the bisect itself
+    /// started from a detached HEAD. Either way it's stable for the run.
+    ///
+    /// Note merge, cherry-pick, and revert conflicts do *not* need handling:
+    /// they leave you on your branch, so `--show-current` answers normally.
+    static func bisectStartName() -> String? {
+        readGitPathFile("BISECT_START").map(strippingHeadsPrefix)
     }
 
     static func shortHead() -> String? {
@@ -100,15 +121,17 @@ enum Git {
     /// Callers must already have established they're in a repo — an empty
     /// result here means detached HEAD, not "no repository".
     ///
-    /// Mid-rebase this resolves back to the branch being rebased, so
-    /// `work term` attaches to the same session it would outside the rebase
-    /// rather than spawning a second one. A plain detached HEAD (e.g. after
-    /// `git checkout <sha>`) has no branch to recover, so it falls back to the
-    /// short SHA, which at least stays stable while you're parked there.
+    /// During a rebase or bisect this resolves back to the branch that
+    /// operation started from, so `work term` attaches to the same session it
+    /// would outside the operation rather than spawning a second one. A plain
+    /// detached HEAD (e.g. after `git checkout <sha>`) has no branch to
+    /// recover, so it falls back to the short SHA, which at least stays stable
+    /// while you're parked there.
     static func sessionBranch() throws -> String {
         let current = try currentBranch()
         if !current.isEmpty { return current }
         if let rebasing = rebaseHeadName() { return rebasing }
+        if let bisecting = bisectStartName() { return bisecting }
         if let sha = shortHead() { return "detached-\(sha)" }
         throw WorkError(
             "Could not determine a branch name: HEAD is detached and no rebase state or commit was found."

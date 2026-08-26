@@ -240,3 +240,99 @@ final class GitSessionBranchTests: XCTestCase {
             "expected a detached-<sha> fallback, got \(resolved)")
     }
 }
+
+/// The other operations that could plausibly confuse branch resolution.
+/// Merge/cherry-pick/revert keep you on your branch, so they need no handling
+/// — these tests pin that down so a future refactor doesn't add speculative
+/// support for them. Bisect *does* detach, and unlike a one-off detach its
+/// HEAD moves at every step, so it needs the BISECT_START fallback.
+final class GitOtherStateTests: XCTestCase {
+    private var originalCWD: String!
+    private var tmp: String!
+
+    override func setUp() {
+        super.setUp()
+        originalCWD = FileManager.default.currentDirectoryPath
+        tmp = NSTemporaryDirectory() + "workr-git-state-" + UUID().uuidString
+        try? FileManager.default.createDirectory(atPath: tmp, withIntermediateDirectories: true)
+    }
+
+    override func tearDown() {
+        FileManager.default.changeCurrentDirectoryPath(originalCWD)
+        try? FileManager.default.removeItem(atPath: tmp)
+        super.tearDown()
+    }
+
+    @discardableResult
+    private func git(_ args: [String], in dir: String) -> CommandOutput? {
+        let identity = [
+            "-c", "user.email=test@example.com",
+            "-c", "user.name=Test",
+            "-c", "commit.gpgsign=false",
+        ]
+        return try? Shell.capture("git", identity + args, currentDirectory: dir)
+    }
+
+    private func write(_ text: String, to path: String) {
+        try? text.write(toFile: path, atomically: true, encoding: .utf8)
+    }
+
+    /// main and topic both edit the same line, so combining them conflicts.
+    private func conflictingRepo() -> String {
+        let repo = tmp + "/repo"
+        try? FileManager.default.createDirectory(atPath: repo, withIntermediateDirectories: true)
+        git(["init", "-q", "-b", "main"], in: repo)
+        write("a\n", to: repo + "/file.txt")
+        git(["add", "."], in: repo)
+        git(["commit", "-q", "-m", "base"], in: repo)
+
+        git(["checkout", "-q", "-b", "topic"], in: repo)
+        write("b\n", to: repo + "/file.txt")
+        git(["commit", "-q", "-am", "topic change"], in: repo)
+
+        git(["checkout", "-q", "main"], in: repo)
+        write("c\n", to: repo + "/file.txt")
+        git(["commit", "-q", "-am", "main change"], in: repo)
+        return repo
+    }
+
+    func testMergeConflictStaysOnBranch() throws {
+        let repo = conflictingRepo()
+        git(["merge", "topic"], in: repo)  // conflicts
+        FileManager.default.changeCurrentDirectoryPath(repo)
+
+        XCTAssertEqual(try Git.currentBranch(), "main", "merge should not detach HEAD")
+        XCTAssertEqual(try Git.sessionBranch(), "main")
+    }
+
+    func testCherryPickConflictStaysOnBranch() throws {
+        let repo = conflictingRepo()
+        git(["cherry-pick", "topic"], in: repo)  // conflicts
+        FileManager.default.changeCurrentDirectoryPath(repo)
+
+        XCTAssertEqual(try Git.currentBranch(), "main", "cherry-pick should not detach HEAD")
+        XCTAssertEqual(try Git.sessionBranch(), "main")
+    }
+
+    func testBisectResolvesToStartingBranch() throws {
+        let repo = tmp + "/bisect"
+        try? FileManager.default.createDirectory(atPath: repo, withIntermediateDirectories: true)
+        git(["init", "-q", "-b", "main"], in: repo)
+        for n in ["one", "two", "three", "four"] {
+            git(["commit", "-q", "--allow-empty", "-m", n], in: repo)
+        }
+        git(["bisect", "start"], in: repo)
+        git(["bisect", "bad"], in: repo)
+        git(["bisect", "good", "HEAD~3"], in: repo)
+
+        FileManager.default.changeCurrentDirectoryPath(repo)
+        XCTAssertEqual(try Git.currentBranch(), "", "bisect is expected to detach HEAD")
+        XCTAssertNil(Git.rebaseHeadName(), "no rebase is running")
+
+        // Must be the branch, not a SHA: HEAD moves each bisect step, so a
+        // SHA-derived name would open a new tmux session per step.
+        XCTAssertEqual(try Git.sessionBranch(), "main")
+
+        git(["bisect", "reset"], in: repo)
+    }
+}
