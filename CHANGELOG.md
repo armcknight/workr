@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `work term` and `work start` now hand the terminal to tmux with `exec` instead
+  of spawning it. `Foundation.Process` puts the child in a new process group and
+  nothing makes that group foreground, so the kernel delivered `SIGWINCH` to
+  `work` and never to tmux — resizing the terminal window left the tmux session
+  at its old size until you detached and reattached. The Rust implementation was
+  unaffected, because `Command::status()` lets the child inherit the process
+  group.
+
 ## [1.0.1] 2026-08-10
 
 ### Fixed

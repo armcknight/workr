@@ -2,7 +2,8 @@ import Foundation
 
 /// Port of src/cmd/term.rs.
 enum TermCommand {
-    static func run(_ cfg: Config) throws {
+    /// Never returns: both branches exec, replacing this process.
+    static func run(_ cfg: Config) throws -> Never {
         // Check repo membership directly. Previously this inferred it from an
         // empty `branch --show-current`, which misreported any detached HEAD —
         // including the middle of a rebase — as "not in a git repository".

@@ -7,10 +7,11 @@ enum Tmux {
     }
 
     /// Attach to an existing session; the tmux client takes over the terminal.
-    static func attachSession(_ name: String) throws {
-        if try Shell.run("tmux", ["attach-session", "-t", name]) != 0 {
-            throw WorkError("tmux attach-session -t \(name) failed")
-        }
+    ///
+    /// exec rather than spawn, so the client inherits this process group and
+    /// therefore receives SIGWINCH. See `Shell.exec`.
+    static func attachSession(_ name: String) throws -> Never {
+        try Shell.exec("tmux", ["attach-session", "-t", name])
     }
 
     static func killSession(_ name: String) throws {
@@ -19,10 +20,13 @@ enum Tmux {
         }
     }
 
-    static func tmuxinatorStart(config: String, sessionName: String) throws {
-        if try Shell.run("tmuxinator", ["start", config, "-n", sessionName]) != 0 {
-            throw WorkError("tmuxinator start \(config) -n \(sessionName) failed")
-        }
+    /// Start a new session from a tmuxinator config, which attaches at the end.
+    ///
+    /// exec for the same reason as `attachSession`: tmuxinator's generated script
+    /// runs `tmux attach-session` in this process group, so the client lands in
+    /// the terminal's foreground group.
+    static func tmuxinatorStart(config: String, sessionName: String) throws -> Never {
+        try Shell.exec("tmuxinator", ["start", config, "-n", sessionName])
     }
 
     /// Build the session name from a pwd slug + a branch slug, mirroring the

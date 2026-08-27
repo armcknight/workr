@@ -91,6 +91,26 @@ enum Shell {
         return process.terminationStatus
     }
 
+    /// Replace this process with `tool args...`, inheriting the terminal.
+    ///
+    /// Spawning is wrong for anything that takes over the terminal.
+    /// `Foundation.Process` spawns with `POSIX_SPAWN_SETPGROUP` and pgroup 0, so
+    /// the child leads a *new* process group and nothing hands it the terminal.
+    /// The kernel sends SIGWINCH only to the foreground group — which stays this
+    /// process — so a tmux client spawned by `run` never learns the window was
+    /// resized. exec keeps the PID and the process group, so the new program is
+    /// already foreground and gets the signal directly.
+    ///
+    /// Returns only on failure, in which case it throws.
+    static func exec(_ tool: String, _ args: [String]) throws -> Never {
+        // env resolves `tool` on PATH, matching how `run` and `capture` launch.
+        let argv = ["/usr/bin/env", tool] + args
+        var cArgs: [UnsafeMutablePointer<CChar>?] = argv.map { strdup($0) }
+        cArgs.append(nil)
+        execv("/usr/bin/env", &cArgs)
+        throw WorkError("failed to exec \(tool): \(String(cString: strerror(errno)))")
+    }
+
     /// Run `tool args...` with `stdin` piped in, inheriting stdout/stderr, and
     /// wait — used to drive a streaming plugin op (the plugin reads its JSON
     /// request from stdin, then streams progress to the inherited stdout).
