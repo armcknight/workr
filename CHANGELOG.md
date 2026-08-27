@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.2] 2026-08-26
+
 ### Fixed
 
 - `work term` and `work start` now hand the terminal to tmux with `exec` instead
