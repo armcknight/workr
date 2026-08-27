@@ -15,6 +15,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   at its old size until you detached and reattached. The Rust implementation was
   unaffected, because `Command::status()` lets the child inherit the process
   group.
+- `work term` no longer reports "not in a git repository" mid-rebase, and now
+  attaches to the branch's existing tmux session instead of spawning a duplicate
+  when HEAD is detached. It checks repo membership directly (via `Git.inRepo()`)
+  rather than inferring it from an empty `git branch --show-current`, which is
+  also empty on any detached HEAD. Session resolution recovers the underlying
+  branch from the rebase head-name, and from `BISECT_START` during a bisect (so
+  each good/bad step reuses one session rather than opening a fresh one per
+  commit); git state is read via `git rev-parse --git-path`, so it works in
+  linked worktrees too. Merge, cherry-pick and revert stay on their branch and
+  need no special handling.
 
 ## [1.0.1] 2026-08-10
 
