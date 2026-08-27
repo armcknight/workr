@@ -4,7 +4,7 @@ import Foundation
 /// of the Rust code's `anyhow::bail!` / `anyhow!` usage. Printed by
 /// ArgumentParser as `Error: <message>` on exit.
 struct WorkError: Error, CustomStringConvertible {
-    let message: String
-    init(_ message: String) { self.message = message }
-    var description: String { message }
+  let message: String
+  init(_ message: String) { self.message = message }
+  var description: String { message }
 }
