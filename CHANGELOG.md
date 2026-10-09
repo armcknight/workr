@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.0] 2026-10-09
+
 ### Added
 
 - `work start --headless` takes `--session-id <uuid>` to start the Claude
