@@ -41,7 +41,9 @@ enum StartCommand {
 
     if args.headless {
       if let promptFile = args.promptFile {
-        try runClaudeHeadless(promptFile: promptFile, logFile: args.logFile, worktree: worktreePath)
+        try runClaudeHeadless(
+          promptFile: promptFile, logFile: args.logFile, worktree: worktreePath,
+          session: args.claudeSession)
       }
     } else {
       if !fm.changeCurrentDirectoryPath(worktreePath) {
@@ -155,25 +157,41 @@ enum StartCommand {
     print("Symlinked \(rel)")
   }
 
-  private static func runClaudeHeadless(promptFile: String, logFile: String?, worktree: String)
-    throws
-  {
+  /// Arguments to `claude` for a headless run.
+  static func claudeHeadlessArguments(session: ClaudeSession?) -> [String] {
+    var arguments = ["claude", "-p", "--dangerously-skip-permissions"]
+    switch session {
+    case .start(let id): arguments += ["--session-id", id]
+    case .resume(let id): arguments += ["--resume", id]
+    case nil: break
+    }
+    return arguments
+  }
+
+  private static func runClaudeHeadless(
+    promptFile: String, logFile: String?, worktree: String, session: ClaudeSession?
+  ) throws {
     guard let promptHandle = FileHandle(forReadingAtPath: promptFile) else {
       throw WorkError("opening prompt file \(promptFile)")
     }
 
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    process.arguments = ["claude", "-p", "--dangerously-skip-permissions"]
+    process.arguments = claudeHeadlessArguments(session: session)
     process.currentDirectoryURL = URL(fileURLWithPath: worktree)
     process.standardInput = promptHandle
 
     if let logFile {
-      guard FileManager.default.createFile(atPath: logFile, contents: nil),
+      // A resumed session appends, so the log keeps what ran before the interruption.
+      let fm = FileManager.default
+      let append: Bool
+      if case .resume = session { append = fm.fileExists(atPath: logFile) } else { append = false }
+      guard append || fm.createFile(atPath: logFile, contents: nil),
         let logHandle = FileHandle(forWritingAtPath: logFile)
       else {
         throw WorkError("creating log file \(logFile)")
       }
+      if append { logHandle.seekToEndOfFile() }
       process.standardOutput = logHandle
       process.standardError = logHandle
     }

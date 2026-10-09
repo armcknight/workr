@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `work start --headless` takes `--session-id <uuid>` to start the Claude
+  session with a known ID, and `--resume <uuid>` to continue that session
+  instead of starting a new one. With `--resume`, the prompt file is sent as the
+  next message and the log file is appended to rather than replaced. Both need
+  `--prompt-file`. This lets a caller such as superlinear continue an agent that
+  was interrupted.
+
 ## [1.0.2] 2026-08-26
 
 ### Fixed

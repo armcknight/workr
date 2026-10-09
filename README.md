@@ -93,6 +93,7 @@ Defaults are baked in. Override by dropping a TOML file at `~/.config/work/confi
 
 Local worktrees:
 - `work start <branch>` — create a worktree and tmux session
+- `work start --headless --prompt-file <path> [--log-file <path>] [--session-id <uuid> | --resume <uuid>] <branch>` — create or reuse the worktree, then pipe the prompt into `claude -p` instead of opening tmux. `--session-id` names the Claude session; `--resume` continues it, sending the prompt as the next message and appending to the log
 - `work term` — attach the tmux session for the current branch
 - `work finish <branch>` — tear down the worktree
 

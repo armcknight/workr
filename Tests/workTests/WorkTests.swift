@@ -354,3 +354,47 @@ final class GitOtherStateTests: XCTestCase {
     git(["bisect", "reset"], in: repo)
   }
 }
+
+final class HeadlessSessionTests: XCTestCase {
+  func testNoSessionLeavesClaudeToPickOne() {
+    XCTAssertEqual(
+      StartCommand.claudeHeadlessArguments(session: nil),
+      ["claude", "-p", "--dangerously-skip-permissions"])
+  }
+
+  func testStartNamesTheSession() {
+    XCTAssertEqual(
+      StartCommand.claudeHeadlessArguments(session: .start("abc")),
+      ["claude", "-p", "--dangerously-skip-permissions", "--session-id", "abc"])
+  }
+
+  func testResumeContinuesTheSession() {
+    XCTAssertEqual(
+      StartCommand.claudeHeadlessArguments(session: .resume("abc")),
+      ["claude", "-p", "--dangerously-skip-permissions", "--resume", "abc"])
+  }
+
+  func testParsesSessionId() throws {
+    let start = try Start.parse([
+      "--headless", "--prompt-file", "p", "--session-id", "abc", "branch",
+    ])
+    XCTAssertEqual(start.claudeSession, .start("abc"))
+  }
+
+  func testParsesResume() throws {
+    let start = try Start.parse(["--headless", "--prompt-file", "p", "--resume", "abc", "branch"])
+    XCTAssertEqual(start.claudeSession, .resume("abc"))
+  }
+
+  func testRejectsBothSessionFlags() {
+    XCTAssertThrowsError(
+      try Start.parse([
+        "--headless", "--prompt-file", "p", "--session-id", "a", "--resume", "b", "branch",
+      ]))
+  }
+
+  func testRejectsSessionOutsideHeadless() {
+    XCTAssertThrowsError(try Start.parse(["--session-id", "a", "branch"]))
+    XCTAssertThrowsError(try Start.parse(["--headless", "--session-id", "a", "branch"]))
+  }
+}
