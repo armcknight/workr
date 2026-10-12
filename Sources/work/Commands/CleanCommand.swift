@@ -10,6 +10,7 @@ enum CleanCommand {
     let artifacts =
       BuildArtifacts.buildDirectories(worktree: worktree)
       + BuildArtifacts.derivedData(worktree: worktree, mainCheckout: mainCheckout)
+      + xcodeBuildMCPDerivedData(worktree: worktree)
     guard !artifacts.isEmpty else {
       print("No build output for \(branch)")
       return
@@ -32,7 +33,8 @@ enum CleanCommand {
   /// Removes the DerivedData of worktrees that no longer exist: those whose
   /// recorded path lies under the worktree directory, or names one of this
   /// repository's branches' worktrees from before the repository moved, and
-  /// those whose name hash matches a known branch's worktree path.
+  /// those whose name hash matches a known branch's worktree path. Also
+  /// removes XcodeBuildMCP's data for those known branches' worktrees.
   static func runOrphans(dryRun: Bool = false, _ cfg: Config) throws {
     guard Git.inRepo() else {
       throw WorkError("Not in a git repository")
@@ -65,10 +67,13 @@ enum CleanCommand {
       where !orphans.contains(directory) {
         orphans.append(directory)
       }
+      if let xcodeBuildMCP = BuildArtifacts.xcodeBuildMCPWorkspace(worktree: worktree) {
+        orphans.append(xcodeBuildMCP)
+      }
     }
 
     guard !orphans.isEmpty else {
-      print("No DerivedData from removed worktrees")
+      print("No DerivedData or XcodeBuildMCP data from removed worktrees")
       return
     }
     if dryRun {
@@ -77,6 +82,17 @@ enum CleanCommand {
     }
     let freed = BuildArtifacts.remove(orphans)
     print("Freed \(BuildArtifacts.formatBytes(freed)) from removed worktrees")
+  }
+
+  /// The DerivedData XcodeBuildMCP built from `worktree`. Its logs and
+  /// state stay while the worktree does, as a session may still use them.
+  static func xcodeBuildMCPDerivedData(
+    worktree: String, root: String = BuildArtifacts.xcodeBuildMCPRoot
+  ) -> [String] {
+    guard let workspace = BuildArtifacts.xcodeBuildMCPWorkspace(worktree: worktree, root: root)
+    else { return [] }
+    let derivedData = "\(workspace)/DerivedData"
+    return FileManager.default.fileExists(atPath: derivedData) ? [derivedData] : []
   }
 
   private static func list(_ paths: [String]) {
