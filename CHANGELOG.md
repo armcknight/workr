@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.0] 2026-10-11
+
 ### Added
 
 - `work clean <branch>` removes a worktree's build output — its SwiftPM
