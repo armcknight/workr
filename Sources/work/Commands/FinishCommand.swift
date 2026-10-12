@@ -10,6 +10,16 @@ enum FinishCommand {
     let worktreePath = cfg.worktree.pathTemplate.replacingOccurrences(
       of: "{branch}", with: args.branch)
 
+    // DerivedData lies outside the worktree, so removing the worktree leaves
+    // it; the worktree's own .build goes with the ignored files below.
+    let derivedData = BuildArtifacts.derivedData(
+      worktree: CleanCommand.absoluteWorktreePath(cfg.worktree.pathTemplate, branch: args.branch),
+      mainCheckout: FileManager.default.currentDirectoryPath)
+    if !derivedData.isEmpty {
+      print("Removing Xcode DerivedData...")
+      BuildArtifacts.remove(derivedData)
+    }
+
     if isDirectory(worktreePath) {
       print("Removing .env files from worktree...")
       _ = try? Git.worktreeClean(worktreePath)

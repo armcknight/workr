@@ -6,6 +6,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `work clean <branch>` removes a worktree's build output — its SwiftPM
+  `.build` directories, at the root and one level down, and the Xcode
+  DerivedData built from it — and keeps the worktree, its source and its
+  ignored files such as `.env`. `--idle-minutes <n>` leaves the output alone
+  if any was used within that time; `--dry-run` lists what would go, with
+  sizes. DerivedData is matched by the path recorded in its `info.plist` and
+  by Xcode's name hash of the worktree's `.xcodeproj`, `.xcworkspace` or
+  package path, so directories without an `info.plist` are found too.
+- `work clean --orphans` removes the DerivedData of this repository's
+  worktrees that no longer exist, including worktrees from before the
+  repository moved, recognised by their branch.
+
+### Changed
+
+- `work finish` also removes the Xcode DerivedData built from the worktree.
+  It used to remove the worktree and its `.build` but leave DerivedData,
+  which lies outside the worktree.
+
 ## [1.1.0] 2026-10-09
 
 ### Added

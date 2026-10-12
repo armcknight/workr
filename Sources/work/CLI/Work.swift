@@ -13,6 +13,7 @@ static let version = "1.1.0"
       Start.self,
       Term.self,
       Finish.self,
+      Clean.self,
       RemoteGroup.self,
     ]
   )

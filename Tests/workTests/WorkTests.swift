@@ -398,3 +398,140 @@ final class HeadlessSessionTests: XCTestCase {
     XCTAssertThrowsError(try Start.parse(["--headless", "--session-id", "a", "branch"]))
   }
 }
+
+final class BuildArtifactsTests: XCTestCase {
+  private var root: String!
+
+  override func setUpWithError() throws {
+    root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+    try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
+  }
+
+  override func tearDownWithError() throws {
+    try? FileManager.default.removeItem(atPath: root)
+  }
+
+  private func mkdir(_ path: String) throws {
+    try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+  }
+
+  private func writeInfo(_ directory: String, workspace: String) throws {
+    let data = try PropertyListSerialization.data(
+      fromPropertyList: [
+        "WorkspacePath": workspace, "LastAccessedDate": Date(timeIntervalSince1970: 1),
+      ],
+      format: .xml, options: 0)
+    FileManager.default.createFile(atPath: "\(directory)/info.plist", contents: data)
+  }
+
+  // The expected value comes from the same algorithm checked against every
+  // DerivedData directory on a machine that recorded its workspace path.
+  func testDerivedDataHashMatchesXcode() {
+    XCTAssertEqual(
+      BuildArtifacts.derivedDataHash("/Users/me/repo/worktrees/linear/a-1-x/App.xcodeproj"),
+      "akscccjmyzycbpenlanlbuxktmxw")
+  }
+
+  func testFindsDerivedDataByHashAndByRecordedPath() throws {
+    let derived = "\(root!)/DerivedData"
+    let main = "\(root!)/repo"
+    let worktree = "\(main)/worktrees/linear/a-1"
+    try mkdir("\(worktree)/App.xcodeproj")
+    let byHash = "\(derived)/App-\(BuildArtifacts.derivedDataHash("\(worktree)/App.xcodeproj"))"
+    let byRecord = "\(derived)/Other-zzzz"
+    let unrelated = "\(derived)/App-aaaa"
+    for directory in [byHash, byRecord, unrelated] { try mkdir(directory) }
+    try writeInfo(byRecord, workspace: "\(worktree)/Package.swift")
+    try writeInfo(unrelated, workspace: "\(main)/App.xcodeproj")
+
+    let found = BuildArtifacts.derivedData(worktree: worktree, mainCheckout: main, root: derived)
+    XCTAssertEqual(Set(found), [byHash, byRecord])
+  }
+
+  func testFindsDerivedDataOfARemovedWorktreeFromTheMainCheckoutsProjects() throws {
+    let derived = "\(root!)/DerivedData"
+    let main = "\(root!)/repo"
+    let worktree = "\(main)/worktrees/linear/gone"
+    try mkdir("\(main)/App.xcodeproj")
+    let orphan = "\(derived)/App-\(BuildArtifacts.derivedDataHash("\(worktree)/App.xcodeproj"))"
+    try mkdir(orphan)
+
+    XCTAssertEqual(
+      BuildArtifacts.derivedData(worktree: worktree, mainCheckout: main, root: derived), [orphan])
+  }
+
+  func testFindsBuildDirectoriesAtTheRootAndOneLevelDown() throws {
+    let worktree = "\(root!)/wt"
+    for path in [
+      "\(worktree)/.build", "\(worktree)/Package/.build", "\(worktree)/a/b/.build",
+      "\(worktree)/.hidden/.build",
+    ] {
+      try mkdir(path)
+    }
+    XCTAssertEqual(
+      BuildArtifacts.buildDirectories(worktree: worktree),
+      ["\(worktree)/.build", "\(worktree)/Package/.build"])
+  }
+
+  func testLastActivityReadsBuildsAndXcodesAccessDate() throws {
+    let build = "\(root!)/wt/.build/arm64/debug"
+    try mkdir(build)
+    let old = Date(timeIntervalSince1970: 1_000)
+    for path in ["\(root!)/wt/.build", "\(root!)/wt/.build/arm64"] {
+      try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: path)
+    }
+    let newer = Date(timeIntervalSince1970: 5_000)
+    try FileManager.default.setAttributes([.modificationDate: newer], ofItemAtPath: build)
+    XCTAssertEqual(BuildArtifacts.lastActivity(["\(root!)/wt/.build"]), newer)
+  }
+
+  func testRemoveFreesAndReportsBytes() throws {
+    let directory = "\(root!)/wt/.build"
+    try mkdir(directory)
+    FileManager.default.createFile(
+      atPath: "\(directory)/f", contents: Data(repeating: 1, count: 10_000))
+    XCTAssertGreaterThan(BuildArtifacts.remove([directory]), 0)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: directory))
+  }
+}
+
+final class CleanCommandTests: XCTestCase {
+  func testNeedsABranchOrOrphans() {
+    XCTAssertNoThrow(try Clean.parse(["linear/a-1"]))
+    XCTAssertNoThrow(try Clean.parse(["linear/a-1", "--idle-minutes", "60"]))
+    XCTAssertNoThrow(try Clean.parse(["--orphans"]))
+    XCTAssertThrowsError(try Clean.parse([]))
+    XCTAssertThrowsError(try Clean.parse(["linear/a-1", "--orphans"]))
+    XCTAssertThrowsError(try Clean.parse(["--orphans", "--idle-minutes", "5"]))
+  }
+
+  func testRecognisesABranchWorktreeFromBeforeTheRepositoryMoved() {
+    let branches = ["linear/cla-23-remove-hangs", "linear/cla-2"]
+    let template = "worktrees/{branch}"
+    XCTAssertTrue(
+      CleanCommand.namesBranchWorktree(
+        "/old/claude-squad/worktrees/linear/cla-23-remove-hangs/App.xcodeproj", template: template,
+        branches: branches))
+    // Whole components only: cla-2 is not cla-23.
+    XCTAssertFalse(
+      CleanCommand.namesBranchWorktree(
+        "/old/claude-squad/worktrees/linear/cla-23/App.xcodeproj", template: template,
+        branches: ["linear/cla-2"]))
+    XCTAssertFalse(
+      CleanCommand.namesBranchWorktree(
+        "/elsewhere/App.xcodeproj", template: template, branches: branches))
+    XCTAssertFalse(
+      CleanCommand.namesBranchWorktree(
+        "/old/worktrees/linear/cla-2/App.xcodeproj", template: "/abs/{branch}", branches: branches))
+  }
+
+  func testStripsOnlyKnownRemotes() {
+    XCTAssertEqual(CleanCommand.stripRemote("origin/linear/a-1", remotes: ["origin"]), "linear/a-1")
+    XCTAssertEqual(CleanCommand.stripRemote("linear/a-1", remotes: ["origin"]), "linear/a-1")
+  }
+
+  func testAbsolutePathsKeepATrailingSlash() {
+    XCTAssertEqual(CleanCommand.absolutePath("/repo/worktrees/"), "/repo/worktrees/")
+    XCTAssertEqual(CleanCommand.absolutePath("/repo/./worktrees/x"), "/repo/worktrees/x")
+  }
+}
