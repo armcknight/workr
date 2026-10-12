@@ -535,3 +535,105 @@ final class CleanCommandTests: XCTestCase {
     XCTAssertEqual(CleanCommand.absolutePath("/repo/./worktrees/x"), "/repo/worktrees/x")
   }
 }
+
+final class SubmoduleWorktreeRemovalTests: XCTestCase {
+  private var root: String!
+  private var worktree: String { "\(root!)/repo/worktrees/b" }
+  private var submodule: String { "\(worktree)/lib" }
+
+  private func git(_ path: String, _ arguments: String...) throws {
+    let output = try Shell.capture(
+      "git",
+      ["-C", path, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "protocol.file.allow=always"]
+        + arguments)
+    XCTAssertTrue(output.succeeded, "git \(arguments): \(output.stderrString)")
+  }
+
+  private func write(_ path: String, _ text: String = "x\n") {
+    FileManager.default.createFile(atPath: path, contents: Data(text.utf8))
+  }
+
+  /// A repository with a submodule whose own repository is its remote, and a
+  /// worktree on branch `b` with the submodule checked out.
+  override func setUpWithError() throws {
+    root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+    for directory in ["lib", "repo"] {
+      try FileManager.default.createDirectory(atPath: "\(root!)/\(directory)", withIntermediateDirectories: true)
+      try git("\(root!)/\(directory)", "init", "-q", "-b", "main")
+      write("\(root!)/\(directory)/README")
+      try git("\(root!)/\(directory)", "add", "README")
+      try git("\(root!)/\(directory)", "commit", "-q", "-m", "init")
+    }
+    try git("\(root!)/repo", "submodule", "add", "-q", "\(root!)/lib", "lib")
+    try git("\(root!)/repo", "commit", "-q", "-m", "add lib")
+    try git("\(root!)/repo", "worktree", "add", "-q", "-b", "b", "worktrees/b")
+    try git(worktree, "submodule", "update", "-q", "--init")
+  }
+
+  override func tearDownWithError() throws {
+    try? FileManager.default.removeItem(atPath: root)
+  }
+
+  func testFindsCheckedOutSubmodules() {
+    XCTAssertEqual(Submodules.checkedOut(in: worktree).map { URL(fileURLWithPath: $0).lastPathComponent }, ["lib"])
+  }
+
+  func testCleanSubmoduleIsRemovedByForce() throws {
+    XCTAssertEqual(Submodules.unsavedWork(in: worktree), [])
+    // `work finish` runs in the main checkout.
+    let previous = FileManager.default.currentDirectoryPath
+    FileManager.default.changeCurrentDirectoryPath("\(root!)/repo")
+    defer { FileManager.default.changeCurrentDirectoryPath(previous) }
+    try Git.worktreeRemove(worktree)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: worktree))
+  }
+
+  func testUncommittedChangeInSubmoduleBlocksRemoval() throws {
+    write("\(submodule)/README", "changed\n")
+    XCTAssertThrowsError(try Git.worktreeRemove(worktree))
+    XCTAssertTrue(FileManager.default.fileExists(atPath: "\(submodule)/README"))
+  }
+
+  func testUntrackedFileInSubmoduleBlocksRemoval() {
+    write("\(submodule)/new")
+    XCTAssertEqual(Submodules.unsavedWork(in: worktree).count, 1)
+  }
+
+  // Committed in the submodule but pushed nowhere: lost with its git directory.
+  func testUnpushedCommitInSubmoduleBlocksRemoval() throws {
+    write("\(submodule)/new")
+    try git(submodule, "add", "new")
+    try git(submodule, "commit", "-q", "-m", "local only")
+    XCTAssertTrue(Submodules.unsavedWork(in: worktree).contains { $0.contains("1 commit(s) on no remote branch") })
+    XCTAssertThrowsError(try Git.worktreeRemove(worktree))
+  }
+
+  // Once the remote has it, as after a push, the commit is safe.
+  func testCommitTheRemoteHasDoesNotBlock() throws {
+    write("\(root!)/lib/later")
+    try git("\(root!)/lib", "add", "later")
+    try git("\(root!)/lib", "commit", "-q", "-m", "upstream")
+    try git(submodule, "pull", "-q", "origin", "main")
+    // The pointer change is the worktree's own uncommitted change; commit it.
+    try git(worktree, "commit", "-q", "-am", "bump lib")
+    XCTAssertEqual(Submodules.unsavedWork(in: worktree), [])
+  }
+
+  func testStashInSubmoduleBlocksRemoval() throws {
+    write("\(submodule)/README", "changed\n")
+    try git(submodule, "stash", "-q")
+    XCTAssertEqual(Submodules.unsavedWork(in: worktree).map { $0.hasSuffix("1 stash(es)") }, [true])
+  }
+
+  func testUncommittedSubmodulePointerBlocksRemoval() throws {
+    write("\(submodule)/new")
+    try git(submodule, "add", "new")
+    try git(submodule, "commit", "-q", "-m", "local only")
+    XCTAssertTrue(Submodules.unsavedWork(in: worktree).contains { $0.hasPrefix(self.worktree + ":") })
+  }
+
+  func testUntrackedFileInWorktreeBlocksRemoval() {
+    write("\(worktree)/notes")
+    XCTAssertEqual(Submodules.unsavedWork(in: worktree).count, 1)
+  }
+}

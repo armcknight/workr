@@ -30,11 +30,9 @@ enum FinishCommand {
 
     if isDirectory(worktreePath) {
       print("Removing worktree: \(worktreePath)")
-      do {
-        try Git.worktreeRemove(worktreePath)
-      } catch {
-        ewrite("warning: \(error)")
-      }
+      // A worktree that stays keeps its branch checked out, so the branch
+      // cannot be deleted either: stop here.
+      try Git.worktreeRemove(worktreePath)
     } else {
       print("Worktree \(worktreePath) does not exist")
     }
