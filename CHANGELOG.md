@@ -18,6 +18,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `work clean --orphans` also removes XcodeBuildMCP's data for this
   repository's branches whose worktrees no longer exist.
 
+### Fixed
+
+- `work finish` removes worktrees that have submodules. git refuses to remove
+  them unless forced, and forcing deletes each submodule's git directory with
+  the worktree, so it is forced only when nothing would be lost: no
+  uncommitted or untracked changes in the worktree or any checked-out
+  submodule, nested ones included, no stashes in a submodule, and no commit on
+  a submodule's HEAD or local branches that no remote branch has (fetched
+  first if one seems missing). Otherwise `work finish` stops, lists what would
+  be lost, and keeps the worktree and branch.
+
 ## [1.2.0] 2026-10-11
 
 ### Added

@@ -25,9 +25,22 @@ enum Git {
     }
   }
 
+  /// Removes the worktree at `path`. git refuses one with submodules unless
+  /// forced, so it is forced then, but only when neither the worktree nor its
+  /// submodules hold work that would be lost.
   static func worktreeRemove(_ path: String) throws {
-    if try Shell.run("git", ["worktree", "remove", path]) != 0 {
-      throw WorkError("git worktree remove \(path) failed")
+    var arguments = ["worktree", "remove", path]
+    if !Submodules.checkedOut(in: path).isEmpty {
+      let problems = Submodules.unsavedWork(in: path)
+      guard problems.isEmpty else {
+        throw WorkError(
+          "Not removing \(path): it or its submodules hold work that would be lost:\n"
+            + problems.map { "  \($0)" }.joined(separator: "\n"))
+      }
+      arguments.insert("--force", at: 2)
+    }
+    if try Shell.run("git", arguments) != 0 {
+      throw WorkError("git \(arguments.joined(separator: " ")) failed")
     }
   }
 
