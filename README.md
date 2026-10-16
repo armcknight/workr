@@ -35,7 +35,7 @@ The binary is named `work`. The Swift package / repo is named `workr` only becau
 
 ## Releasing
 
-The `release` GitHub Actions workflow runs on every numeric tag push (e.g. `0.1.1`, `0.1.1-rc.1`). It:
+The `release` GitHub Actions workflow runs on every numeric tag push (e.g. `0.1.1`, `0.1.1-RC1`). It:
 
 1. Builds `swift build -c release` on `macos-15` (arm64 runner)
 2. Verifies the `version:` in `Sources/work/CLI/Work.swift` matches the base of the tag
@@ -43,7 +43,7 @@ The `release` GitHub Actions workflow runs on every numeric tag push (e.g. `0.1.
 4. Creates a release on `armcknight/homebrew-tools` and uploads the tarball
 5. Updates the appropriate cask in that tap and pushes:
    - tag `X.Y.Z` → `Casks/work.rb` (stable channel — what `brew install --cask work` gets)
-   - tag `X.Y.Z-rc.N` → `Casks/work-rc.rb` (release-candidate channel — opt-in via `brew install --cask armcknight/tools/work-rc`)
+   - tag `X.Y.Z-RCN` → `Casks/work-rc.rb` (release-candidate channel — opt-in via `brew install --cask armcknight/tools/work-rc`)
 
 ### Cutting releases
 
@@ -53,7 +53,7 @@ Run from the workr repo (requires `vrsn` on PATH, from the `armcknight/tools` ca
 make patch        # 0.1.0 → 0.1.1 in Work.swift, commit
 make minor        # 0.1.0 → 0.2.0
 make major        # 0.1.0 → 1.0.0
-make deploy-beta  # tags <current-version>-rc.N where N auto-increments
+make deploy-beta  # tags <current-version>-RCN where N auto-increments
 make deploy       # tags <current-version> (a final release)
 ```
 
@@ -61,8 +61,8 @@ Typical RC cycle:
 
 ```
 make patch        # bump to 0.1.1
-make deploy-beta  # tag 0.1.1-rc.1, push — workflow ships to work-rc cask
-make deploy-beta  # tag 0.1.1-rc.2 — workflow bumps work-rc again
+make deploy-beta  # tag 0.1.1-RC1, push — workflow ships to work-rc cask
+make deploy-beta  # tag 0.1.1-RC2 — workflow bumps work-rc again
 make deploy       # tag 0.1.1 — workflow ships to stable work cask
 ```
 

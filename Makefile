@@ -53,7 +53,7 @@ uninstall: ## Remove the local work binary and restore the Homebrew cask
 # Actions picks up the tag, builds, uploads to armcknight/homebrew-tools
 # releases, and bumps the matching cask file there:
 #   - tags `X.Y.Z`        → Casks/work.rb       (stable channel)
-#   - tags `X.Y.Z-rc.N`   → Casks/work-rc.rb    (RC channel; users opt in)
+#   - tags `X.Y.Z-RCN`    → Casks/work-rc.rb    (RC channel; users opt in)
 #
 # Requires `vrsn` + `prepare-release` on PATH (from the armcknight/tools cask).
 
@@ -66,9 +66,9 @@ minor: ## Bump the minor version (x.Y.0) and commit
 major: ## Bump the major version (X.0.0) and commit
 	vrsn major -f $(VERSION_FILE) -k $(VRSN_KEY) --commit
 
-# Tags an RC of the current package version. RC number is auto-incremented
-# by counting existing `<version>-rc.*` tags. So you can run deploy-beta
-# repeatedly to ship rc.1, rc.2, etc. without re-bumping the version.
+# Tags an RC of the current package version. prepare-release numbers it by
+# counting the consecutive RC sections at the top of the CHANGELOG, so you can
+# run deploy-beta repeatedly to ship RC1, RC2, etc. without re-bumping.
 deploy-beta: ## Migrate the changelog, tag an RC, and push (ships the work-rc cask)
 	prepare-release rc --file $(VERSION_FILE) --key $(VRSN_KEY) --push
 
