@@ -10,14 +10,20 @@ enum FinishCommand {
     let worktreePath = cfg.worktree.pathTemplate.replacingOccurrences(
       of: "{branch}", with: args.branch)
 
-    // DerivedData lies outside the worktree, so removing the worktree leaves
-    // it; the worktree's own .build goes with the ignored files below.
+    // DerivedData and XcodeBuildMCP's data lie outside the worktree, so
+    // removing the worktree leaves them; the worktree's own .build goes with
+    // the ignored files below.
+    let absoluteWorktree = CleanCommand.absoluteWorktreePath(
+      cfg.worktree.pathTemplate, branch: args.branch)
     let derivedData = BuildArtifacts.derivedData(
-      worktree: CleanCommand.absoluteWorktreePath(cfg.worktree.pathTemplate, branch: args.branch),
-      mainCheckout: FileManager.default.currentDirectoryPath)
+      worktree: absoluteWorktree, mainCheckout: FileManager.default.currentDirectoryPath)
     if !derivedData.isEmpty {
       print("Removing Xcode DerivedData...")
       BuildArtifacts.remove(derivedData)
+    }
+    if let xcodeBuildMCP = BuildArtifacts.xcodeBuildMCPWorkspace(worktree: absoluteWorktree) {
+      print("Removing XcodeBuildMCP data...")
+      BuildArtifacts.remove([xcodeBuildMCP])
     }
 
     if isDirectory(worktreePath) {
