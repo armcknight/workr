@@ -6,3 +6,4 @@
 /.build
 /.swiftpm/
 /worktrees/
+/Sources/work/CLI/BuildMetadata.generated.swift

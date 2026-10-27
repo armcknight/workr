@@ -20,7 +20,7 @@ brew trust armcknight/tools   # third-party taps require explicit trust
 ### Local dev build
 
 ```
-make install       # builds release, drops binary at $(brew --prefix)/bin/work (shadows the cask)
+make install       # builds release with the git hash in --version, drops binary at $(brew --prefix)/bin/work (shadows the cask)
 make uninstall     # removes it and reinstalls the cask
 ```
 

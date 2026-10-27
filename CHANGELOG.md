@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `make install` builds with the git commit in the version: `work --version`
+  prints `1.2.0+<commit>`, and `.dirty` when the working tree had changes. A
+  release build prints the version alone.
+
 ### Fixed
 
 - `work finish` removes worktrees that have submodules. git refuses to remove

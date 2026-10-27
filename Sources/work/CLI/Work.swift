@@ -8,7 +8,7 @@ static let version = "1.2.0"
   static let configuration = CommandConfiguration(
     commandName: "work",
     abstract: "Worktree, tmux session, and pluggable cloud-devbox manager",
-    version: Work.version,
+    version: Work.fullVersion,
     subcommands: [
       Start.self,
       Term.self,
