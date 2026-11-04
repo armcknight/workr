@@ -3,7 +3,7 @@ import ArgumentParser
 struct Work: ParsableCommand {
   // Single source of truth for the release version. Bumped by `vrsn -k
   // version` (see Makefile) and read by the release workflow.
-static let version = "1.2.0"
+static let version = "1.3.0"
 
   static let configuration = CommandConfiguration(
     commandName: "work",
