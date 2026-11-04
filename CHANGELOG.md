@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.0] 2026-11-03
+
 ### Added
 
 - `make install` builds with the git commit in the version: `work --version`
