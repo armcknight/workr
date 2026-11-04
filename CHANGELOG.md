@@ -12,6 +12,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   prints `1.2.0+<commit>`, and `.dirty` when the working tree had changes. A
   release build prints the version alone.
 
+### Changed
+
+- `work finish` also removes XcodeBuildMCP's data for the worktree: its
+  directory under `~/Library/Developer/XcodeBuildMCP/workspaces`, which holds
+  the DerivedData, logs, result bundles and state of XcodeBuildMCP sessions
+  run in the worktree. The directory is found by XcodeBuildMCP's key for the
+  worktree's real path.
+- `work clean <branch>` also removes the DerivedData XcodeBuildMCP built from
+  the worktree, and keeps its logs and state.
+- `work clean --orphans` also removes XcodeBuildMCP's data for this
+  repository's branches whose worktrees no longer exist.
+
 ### Fixed
 
 - `work finish` removes worktrees that have submodules. git refuses to remove

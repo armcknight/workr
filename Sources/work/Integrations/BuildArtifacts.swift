@@ -2,8 +2,9 @@ import CryptoKit
 import Foundation
 
 /// Build output a worktree leaves behind: SwiftPM `.build` directories inside
-/// it, and Xcode DerivedData outside it, under
-/// ~/Library/Developer/Xcode/DerivedData.
+/// it, and outside it Xcode DerivedData, under
+/// ~/Library/Developer/Xcode/DerivedData, and XcodeBuildMCP's data, under
+/// ~/Library/Developer/XcodeBuildMCP/workspaces.
 ///
 /// Xcode names a DerivedData directory `<Project>-<hash>`, the hash derived
 /// from the path of the workspace, project or package it built, and usually
@@ -11,10 +12,12 @@ import Foundation
 /// both ways, so one without an `info.plist` is still found, as is one whose
 /// worktree has since been removed.
 enum BuildArtifacts {
-  static var derivedDataRoot: String {
+  private static var developerDirectory: String {
     let home = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
-    return "\(home)/Library/Developer/Xcode/DerivedData"
+    return "\(home)/Library/Developer"
   }
+
+  static var derivedDataRoot: String { "\(developerDirectory)/Xcode/DerivedData" }
 
   /// Xcode's DerivedData hash of `path`: its MD5 digest, each 8-byte half
   /// read big-endian and spelled as 14 base-26 letters.
@@ -72,6 +75,36 @@ enum BuildArtifacts {
       guard let workspace = info(directory)?["WorkspacePath"] as? String else { return nil }
       return (directory, workspace)
     }
+  }
+
+  static var xcodeBuildMCPRoot: String { "\(developerDirectory)/XcodeBuildMCP/workspaces" }
+
+  /// XcodeBuildMCP's key for a workspace root: the root's name, with runs of
+  /// other characters than letters, digits, `.`, `_` and `-` made one `-`,
+  /// and the first 12 hex digits of the SHA-256 digest of its path.
+  static func xcodeBuildMCPKey(_ path: String) -> String {
+    let name = (path as NSString).lastPathComponent
+    var slug = name.replacingOccurrences(
+      of: "[^A-Za-z0-9._-]+", with: "-", options: .regularExpression)
+    slug = slug.replacingOccurrences(of: "^[.-]+|[.-]+$", with: "", options: .regularExpression)
+    slug = String(slug.prefix(64))
+    let hash = SHA256.hash(data: Data(path.utf8)).map { String(format: "%02x", $0) }.joined()
+    return "\(slug.isEmpty ? "workspace" : slug)-\(hash.prefix(12))"
+  }
+
+  /// The directory where XcodeBuildMCP keeps the DerivedData, logs, result
+  /// bundles and state of a session run in `worktree`, if there is one.
+  /// XcodeBuildMCP keys it by the real path, so symlinks are resolved while
+  /// the worktree exists.
+  static func xcodeBuildMCPWorkspace(worktree: String, root: String = xcodeBuildMCPRoot)
+    -> String?
+  {
+    let path = realpath(worktree, nil).map { pointer in
+      defer { free(pointer) }
+      return String(cString: pointer)
+    } ?? worktree
+    let directory = "\(root)/\(xcodeBuildMCPKey(path))"
+    return FileManager.default.fileExists(atPath: directory) ? directory : nil
   }
 
   /// SwiftPM build directories in a worktree: at its root, and one level

@@ -95,9 +95,9 @@ Local worktrees:
 - `work start <branch>` — create a worktree and tmux session
 - `work start --headless --prompt-file <path> [--log-file <path>] [--session-id <uuid> | --resume <uuid>] <branch>` — create or reuse the worktree, then pipe the prompt into `claude -p` instead of opening tmux. `--session-id` names the Claude session; `--resume` continues it, sending the prompt as the next message and appending to the log
 - `work term` — attach the tmux session for the current branch
-- `work finish <branch>` — tear down the worktree, and the Xcode DerivedData built from it
-- `work clean <branch> [--idle-minutes <n>] [--dry-run]` — remove the worktree's build output, its SwiftPM `.build` directories and its Xcode DerivedData, keeping the worktree; with `--idle-minutes`, only if none was used that recently
-- `work clean --orphans [--dry-run]` — remove the DerivedData of this repository's worktrees that no longer exist, including those from before the repository moved
+- `work finish <branch>` — tear down the worktree, the Xcode DerivedData built from it, and its XcodeBuildMCP data
+- `work clean <branch> [--idle-minutes <n>] [--dry-run]` — remove the worktree's build output, its SwiftPM `.build` directories and its Xcode and XcodeBuildMCP DerivedData, keeping the worktree; with `--idle-minutes`, only if none was used that recently
+- `work clean --orphans [--dry-run]` — remove the DerivedData and XcodeBuildMCP data of this repository's worktrees that no longer exist, including those from before the repository moved
 
 Cloud devboxes (via a pluggable provider — see below):
 - `work start --provider <name> <branch>` / `work finish --provider <name> <branch>`

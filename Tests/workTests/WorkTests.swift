@@ -460,6 +460,41 @@ final class BuildArtifactsTests: XCTestCase {
       BuildArtifacts.derivedData(worktree: worktree, mainCheckout: main, root: derived), [orphan])
   }
 
+  // The same algorithm matched XcodeBuildMCP's directory for a real worktree.
+  func testXcodeBuildMCPKeyMatchesXcodeBuildMCP() {
+    XCTAssertEqual(
+      BuildArtifacts.xcodeBuildMCPKey("/Users/me/repo/worktrees/linear/a-1-x"),
+      "a-1-x-83fd1ccb0741")
+    XCTAssertTrue(BuildArtifacts.xcodeBuildMCPKey("/a/.My App!.").hasPrefix("My-App-"))
+    XCTAssertTrue(BuildArtifacts.xcodeBuildMCPKey("/").hasPrefix("workspace-"))
+  }
+
+  func testFindsXcodeBuildMCPWorkspaceByRealPath() throws {
+    let workspaces = "\(root!)/workspaces"
+    let worktree = "\(root!)/repo/worktrees/linear/a-1"
+    try mkdir(worktree)
+    let link = "\(root!)/link"
+    try FileManager.default.createSymbolicLink(
+      atPath: link, withDestinationPath: "\(root!)/repo")
+    let real = realpath(worktree, nil).map { pointer in
+      defer { free(pointer) }
+      return String(cString: pointer)
+    }!
+    let directory = "\(workspaces)/\(BuildArtifacts.xcodeBuildMCPKey(real))"
+    try mkdir("\(directory)/DerivedData")
+    try mkdir("\(directory)/logs")
+
+    XCTAssertEqual(
+      BuildArtifacts.xcodeBuildMCPWorkspace(
+        worktree: "\(link)/worktrees/linear/a-1", root: workspaces), directory)
+    XCTAssertEqual(
+      CleanCommand.xcodeBuildMCPDerivedData(worktree: worktree, root: workspaces),
+      ["\(directory)/DerivedData"])
+    XCTAssertNil(
+      BuildArtifacts.xcodeBuildMCPWorkspace(
+        worktree: "\(root!)/repo/worktrees/linear/a-2", root: workspaces))
+  }
+
   func testFindsBuildDirectoriesAtTheRootAndOneLevelDown() throws {
     let worktree = "\(root!)/wt"
     for path in [

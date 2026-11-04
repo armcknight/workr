@@ -4,7 +4,7 @@ struct Clean: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "clean",
     abstract:
-      "Remove a worktree's build output (SwiftPM .build, Xcode DerivedData), keeping the worktree.",
+      "Remove a worktree's build output (SwiftPM .build, Xcode and XcodeBuildMCP DerivedData), keeping the worktree.",
     discussion: """
       Run from the repository's main checkout. Only generated build output is removed: \
       the worktree, its source and its ignored files such as .env stay.
@@ -19,7 +19,7 @@ struct Clean: ParsableCommand {
   @Flag(
     name: .long,
     help:
-      "Instead of one branch, remove the DerivedData of this repository's worktrees that no longer exist."
+      "Instead of one branch, remove the DerivedData and XcodeBuildMCP data of this repository's worktrees that no longer exist."
   )
   var orphans = false
 
